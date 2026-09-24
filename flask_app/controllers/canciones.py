@@ -10,116 +10,147 @@ from flask_app.models.cancion import Canciones
 from flask_app.models.favorito import Favoritos
 from flask_app.models.usuario import Usuarios
 
+
 # USUARIOS
 @app.route("/")
 def index():
     return redirect(url_for("usuarios"))
 
+
 @app.route("/usuarios")
 def usuarios():
-    list_usuarios = Usuarios.tomar_todo()
+    lista_usuarios = Usuarios.toma_todo()
+    return render_template("usuarios.html", usuarios=lista_usuarios)
 
-# CREAR INSCRIPCIÓN
-@app.route("/registro",methods=["POST"])
+
+@app.route("/usuarios/registro", methods=["POST"])
 def inscribir():
-    """
-    Recibe estudiante_id y curso_id y crea
-    una relación en la tabla inscripciones.
-    """
+    nombre = request.form.get("nombre", "").strip()
+    email = request.form.get("email", "").strip()
+    contrasena = request.form.get("contrasena", "").strip()
 
-    usuario_id_texto = request.form.get(
-        "usuario_id"
-    )
-    cancion_id_texto = request.form.get(
-        "cancion_id"
-    )
+    if not nombre or not email or not contrasena:
+        flash("Todos los campos son obligatorios.", "danger")
+        return redirect(url_for("usuarios"))
 
-    # Comprobar que ambos valores fueron enviados.
-    if not usuario_id_texto or not cancion_id_texto:
-        flash(
-            "Por favor seleccionar usuarios y canción favorita.",
-            "danger"
-        )
-        return redirect(
-            url_for("index")
-        )
+    data = {
+        "nombre": nombre,
+        "email": email,
+        "contrasena": contrasena
+    }
+    resultado = Usuarios.salvar(data)
+    if resultado is False:
+        flash("No fue posible crear el usuario.", "danger")
+        return redirect(url_for("usuarios"))
 
-    # Convertir IDs a enteros.
-    try:
-        usuario_id = int(
-            usuario_id_texto
-        )
-        cancion_id = int(
-            cancion_id_texto
-        )
-    except ValueError:
-        flash(
-            "Los identificadores no son válidos.",
-            "danger"
-        )
-        return redirect(
-            url_for("index")
-        )
+    flash("Usuario creado correctamente.", "success")
+    return redirect(url_for("usuarios"))
 
-    # Comprobar que el estudiante exista.
-    usuario = Usuarios.tomar_por_id(
-        usuario_id
-    )
+
+@app.route("/usuarios/<int:id>")
+def mostrar_usuario(id):
+    data = {"id_usuario": id}
+    usuario = Usuarios.id_con_favoritos(data)
+
     if usuario is None:
-        flash(
-            "El usuario seleccionado no existe.",
-            "danger"
-        )
-        return redirect(
-            url_for("index")
-        )
+        return ("Usuario no encontrado", 404)
 
-    # Comprobar que el curso exista.
-    cancion = Canciones.tomar_por_id(
-        cancion_id
+    canciones = Canciones.toma_todo()
+
+    return render_template(
+        "mostrar_usuario.html",
+        usuario=usuario,
+        canciones=canciones
     )
+
+
+# CANCIONES
+@app.route("/canciones")
+def canciones():
+    lista_canciones = Canciones.toma_todo()
+    return render_template("canciones.html", canciones=lista_canciones)
+
+
+@app.route("/canciones/crear", methods=["POST"])
+def crear_cancion():
+    titulo = request.form.get("titulo", "").strip()
+    artista = request.form.get("artista", "").strip()
+
+    if not titulo or not artista:
+        flash("Todos los campos son obligatorios.", "danger")
+        return redirect(url_for("canciones"))
+
+    data = {"titulo": titulo, "artista": artista}
+    resultado = Canciones.salvar(data)
+
+    if resultado is False:
+        flash("No fue posible crear la canción.", "danger")
+        return redirect(url_for("canciones"))
+
+    flash("Canción guardada correctamente.", "success")
+    return redirect(url_for("canciones"))
+
+
+@app.route("/canciones/<int:id>")
+def mostrar_cancion(id):
+    data = {"id_cancion": id}
+    cancion = Canciones.id_con_usuarios(data)
+
     if cancion is None:
-        flash(
-            "La cancion seleccionado no existe.",
-            "danger"
-        )
+        return ("Canción no encontrada", 404)
 
-        return redirect(
-            url_for("index")
-        )
+    usuarios = Canciones.usuarios_no_favorito({"cancion_id": id})
 
-    # Crear diccionario para la relación.
+    return render_template(
+        "mostrar_cancion.html",
+        cancion=cancion,
+        usuarios=usuarios
+    )
+
+
+@app.route("/favoritos/agregar", methods=["POST"])
+def agregar_favorito():
+    usuario_id_texto = request.form.get("usuario_id")
+    cancion_id_texto = request.form.get("cancion_id")
+    origen = request.form.get("origen")
+
+    if not usuario_id_texto or not cancion_id_texto:
+        flash("Debes seleccionar los datos necesarios.", "danger")
+        return redirect(url_for("usuarios"))
+
+    try:
+        usuario_id = int(usuario_id_texto)
+        cancion_id = int(cancion_id_texto)
+    except ValueError:
+        flash("Los identificadores no son válidos.", "danger")
+        return redirect(url_for("usuarios"))
+
+    usuario = Usuarios.tomar_por_id(usuario_id)
+    if usuario is None:
+        flash("El usuario seleccionado no existe.", "danger")
+        return redirect(url_for("usuarios"))
+
+    cancion = Canciones.tomar_por_id(cancion_id)
+    if cancion is None:
+        flash("La canción seleccionada no existe.", "danger")
+        return redirect(url_for("canciones"))
+
     data = {
         "usuario_id": usuario_id,
         "cancion_id": cancion_id
     }
 
-    # Evitar una inscripción duplicada.
     if Favoritos.existe(data):
-        flash(
-            "El usuario ya marco esta canción como favorita.",
-            "warning"
-        )
-        return redirect(
-            url_for("index")
-        )
+        flash("Esta canción ya está entre los favoritos del usuario.", "warning")
+    else:
+        resultado = Favoritos.agregar(data)
+        if resultado is False:
+            flash("No fue posible agregar el favorito.", "danger")
+        else:
+            flash("Favorito agregado correctamente.", "success")
 
-    # Insertar relación.
-    resultado = Favoritos.usuario_favoritos(data)
-    if resultado is False:
-        flash(
-            "No fue posible crear la unión.",
-            "danger"
-        )
-        return redirect(
-            url_for("index")
-        )
-
-    # Inscripción exitosa.
-    flash(
-        "Unión realizada correctamente.",
-        "success"
-    )
-    return redirect(
-        url_for("index")
-    )
+    if origen == "usuario":
+        return redirect(url_for("mostrar_usuario", id=usuario_id))
+    if origen == "cancion":
+        return redirect(url_for("mostrar_cancion", id=cancion_id))
+    return redirect(url_for("usuarios"))

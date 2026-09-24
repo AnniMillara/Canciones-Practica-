@@ -1,14 +1,15 @@
 from flask_app.config.mysqlconnection import connectToMySQL
+
+
 class Usuarios:
     def __init__(self, data):
         self.id_usuario = data["id_usuario"]
         self.nombre = data["nombre"]
-        self.contrasena = data["contrasena"]
         self.email = data["email"]
+        self.contrasena = data["contrasena"]
         self.created_at = data["created_at"]
         self.updated_at = data["updated_at"]
         self.favoritos = []
-
 
     @classmethod
     def toma_todo(cls):
@@ -23,16 +24,11 @@ class Usuarios:
             FROM usuarios
             ORDER BY id_usuario;
         """
-
-        resultados = connectToMySQL(
-            "esquema_canciones"
-        ).query_db(query)
-
+        resultados = connectToMySQL("esquema_canciones").query_db(query)
         usuarios = []
-        for user in resultados:
+        for user in resultados or []:
             usuarios.append(cls(user))
         return usuarios
-
 
     @classmethod
     def tomar_por_id(cls, id_usuario):
@@ -47,33 +43,17 @@ class Usuarios:
             FROM usuarios
             WHERE id_usuario = %(id_usuario)s;
         """
-        data = {
-            "id_usuario": id_usuario
-        }
-        
-        resultados = connectToMySQL(
-            "esquema_canciones"
-        ).query_db(query, data)
-        
+        data = {"id_usuario": id_usuario}
+        resultados = connectToMySQL("esquema_canciones").query_db(query, data)
         if resultados:
-            return cls(
-                resultados[0]
-            )
+            return cls(resultados[0])
         return None
-    
+
     @classmethod
     def salvar(cls, data):
         query = """
-            INSERT INTO usuarios (
-                    nombre,
-                    email,
-                    contrasena
-                    )
-            VALUES (
-                    %(nombre)s, 
-                    %(email)s,
-                    %(contrasena)s
-                    );
+            INSERT INTO usuarios (nombre, email, contrasena)
+            VALUES (%(nombre)s, %(email)s, %(contrasena)s);
         """
         return connectToMySQL("esquema_canciones").query_db(query, data)
 
@@ -96,15 +76,16 @@ class Usuarios:
 
             FROM usuarios
             LEFT JOIN favoritos
-                ON favoritos.usuario_id = usuarios.id
+                ON favoritos.usuario_id = usuarios.id_usuario
             LEFT JOIN canciones
-                ON favoritos.cancion_id = canciones.id
-            WHERE usuarios.id = %(id)s;
+                ON favoritos.cancion_id = canciones.id_cancion
+            WHERE usuarios.id_usuario = %(id_usuario)s;
         """
         resultados = connectToMySQL("esquema_canciones").query_db(query, data)
 
         if not resultados:
             return None
+
         usuario_data = {
             "id_usuario": resultados[0]["usuario_id"],
             "nombre": resultados[0]["usuario_nombre"],
@@ -113,17 +94,15 @@ class Usuarios:
             "created_at": resultados[0]["usuario_created_at"],
             "updated_at": resultados[0]["usuario_updated_at"]
         }
-
         usuario = cls(usuario_data)
 
         for fila in resultados:
             if fila["cancion_id"] is not None:
                 usuario.favoritos.append({
-                    "id": fila["cancion_id"],
+                    "id_cancion": fila["cancion_id"],
                     "titulo": fila["cancion_titulo"],
                     "artista": fila["cancion_artista"],
                     "created_at": fila["cancion_created_at"],
                     "updated_at": fila["cancion_updated_at"]
                 })
-
         return usuario

@@ -1,13 +1,15 @@
 from flask_app.config.mysqlconnection import connectToMySQL
+
+
 class Canciones:
     def __init__(self, data):
         self.id_cancion = data["id_cancion"]
         self.titulo = data["titulo"]
         self.artista = data["artista"]
         self.created_at = data["created_at"]
-        self.update_at = data["update_at"]
+        self.updated_at = data["updated_at"]
         self.usuarios = []
-    
+
     @classmethod
     def toma_todo(cls):
         query = """
@@ -15,20 +17,15 @@ class Canciones:
                 id_cancion,
                 titulo,
                 artista,
-                created_at
+                created_at,
+                updated_at
             FROM canciones
             ORDER BY id_cancion;
         """
-
-        resultados = connectToMySQL(
-            "esquema_canciones"
-        ).query_db(query)
-
+        resultados = connectToMySQL("esquema_canciones").query_db(query)
         canciones = []
-        for cancion in resultados:
-            canciones.append(
-                cls(cancion)
-            )
+        for cancion in resultados or []:
+            canciones.append(cls(cancion))
         return canciones
 
     @classmethod
@@ -43,32 +40,17 @@ class Canciones:
             FROM canciones
             WHERE id_cancion = %(id_cancion)s;
         """
-
-        data = {
-            "id_cancion": id_cancion
-        }
-
-        resultados = connectToMySQL(
-            "esquema_canciones"
-        ).query_db(query, data)
-
+        data = {"id_cancion": id_cancion}
+        resultados = connectToMySQL("esquema_canciones").query_db(query, data)
         if resultados:
-            return cls(
-                resultados[0]
-            )
+            return cls(resultados[0])
         return None
 
     @classmethod
     def salvar(cls, data):
         query = """
-            INSERT INTO canciones (
-                titulo,
-                artista
-                )
-            VALUES (
-                %(titulo)s,
-                %(artista)s
-                );
+            INSERT INTO canciones (titulo, artista)
+            VALUES (%(titulo)s, %(artista)s);
         """
         return connectToMySQL("esquema_canciones").query_db(query, data)
 
@@ -90,13 +72,11 @@ class Canciones:
                 usuarios.updated_at AS usuario_updated_at
 
             FROM canciones
-
             LEFT JOIN favoritos
-                ON favoritos.cancion_id = canciones.id
+                ON favoritos.cancion_id = canciones.id_cancion
             LEFT JOIN usuarios
-                ON favoritos.usuario_id = usuarios.id
-
-            WHERE canciones.id = %(id_cancion)s;
+                ON favoritos.usuario_id = usuarios.id_usuario
+            WHERE canciones.id_cancion = %(id_cancion)s;
         """
         resultados = connectToMySQL("esquema_canciones").query_db(query, data)
 
@@ -110,20 +90,18 @@ class Canciones:
             "created_at": resultados[0]["cancion_created_at"],
             "updated_at": resultados[0]["cancion_updated_at"]
         }
-
         cancion = cls(cancion_data)
 
         for fila in resultados:
             if fila["usuario_id"] is not None:
                 cancion.usuarios.append({
-                    "id": fila["usuario_id"],
+                    "id_usuario": fila["usuario_id"],
                     "nombre": fila["usuario_nombre"],
                     "email": fila["usuario_email"],
                     "contrasena": fila["usuario_contrasena"],
                     "created_at": fila["usuario_created_at"],
                     "updated_at": fila["usuario_updated_at"]
                 })
-
         return cancion
 
     @classmethod
@@ -137,11 +115,9 @@ class Canciones:
                 usuarios.created_at,
                 usuarios.updated_at
             FROM usuarios
-
             LEFT JOIN favoritos
-                ON favoritos.usuario_id = usuarios.id
+                ON favoritos.usuario_id = usuarios.id_usuario
                 AND favoritos.cancion_id = %(cancion_id)s
-
             WHERE favoritos.usuario_id IS NULL
             ORDER BY usuarios.nombre;
         """
